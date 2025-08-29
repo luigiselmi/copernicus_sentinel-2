@@ -1,6 +1,6 @@
 #! /usr/bin/python
 ###############################################
-# bigearthlib v.0.1 (27.08.2025)
+# bigearthlib v.0.1.1 (29.08.2025)
 ###############################################
 import numpy as np
 import os
@@ -171,12 +171,15 @@ def get_raster_attributes(img_path):
 
 #----------------------------2) TIFF to PNG transformation ----------------------------------
 
-def normalize(data_array):
+def normalize_uint8(data_array):
     '''
-    This function transforms the bit depth of the TIFF bands from 16 to 8 (0-255) for the PNG files.
+    This function transforms the bit depth of the TIFF bands from 16 to 8 (0-255).
     '''
-    return (data_array - np.min(data_array)) * ((255 - 0) / (np.max(data_array) - np.min(data_array))) + 0
-
+    img_size = data_array.shape
+    norm_array = (data_array - np.min(data_array)) * (255 / (np.max(data_array) - np.min(data_array)))
+    norm_array_uint8 = norm_array.astype(np.uint8)
+    return norm_array_uint8
+    
 def createPNG(source_path_list, target_path):
     '''
     This function creates a multiband PNG file from a list of GeoTIFF files 
@@ -200,7 +203,7 @@ def createPNG(source_path_list, target_path):
     #print('createPNG source_path_list', source_path_list)
     for raster_path in source_path_list:
         dataset = rasterio.open(raster_path)
-        band = normalize(dataset.read(1))
+        band = normalize_uint8(dataset.read(1))
         band_list.append(band)
         
         
@@ -214,6 +217,39 @@ def createPNG(source_path_list, target_path):
         band_index = 1
         for band in band_list:
             target_dataset.write(band, band_index)
+            band_index += 1
+    
+    return SUCCESS
+
+def createPNGfromArray(band_array_list, target_path):
+    '''
+    This function creates a multiband PNG file from a list of GeoTIFF files 
+    containing one band each. For an RGB file the source list shall contain three bands
+    in the RGB order. For Sentinel-2 it is B04, B03, B02. The bin depth of each band is
+    reduced from 16 bits to 8 bits. If the target file already exists
+    it doesn't create a new one and will return 1, otherwise it will create a new raster
+    and will return 0 
+    '''
+    SUCCESS = 0
+    FAILURE = 1
+    if (os.path.isfile(target_path)):
+        return FAILURE 
+        
+    width = band_array_list[0].shape[0]
+    height = band_array_list[0].shape[1]
+    count = len(band_array_list)    
+        
+    with rasterio.open(target_path,
+                    mode='w',
+                    driver='PNG',
+                    height=height,
+                    width=width,
+                    count=count,
+                    dtype='uint8') as target_dataset:
+        band_index = 1
+        for band in band_array_list:
+            norm_band = normalize_uint8(band)
+            target_dataset.write(norm_band, band_index)
             band_index += 1
     
     return SUCCESS
